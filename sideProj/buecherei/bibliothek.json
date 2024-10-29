@@ -1,0 +1,93 @@
+{
+  "Buecher": [
+    {
+      "titel": "1984",
+      "autor": "George Orwell",
+      "genre": "Dystopie",
+      "isbn": 3548234100,
+      "regal": "O",
+      "ausgeliehen": true
+    },
+    {
+      "titel": "Farm der Tiere",
+      "autor": "George Orwell",
+      "genre": "Fable",
+      "isbn": 9783730609774,
+      "regal": "O",
+      "ausgeliehen": false
+    },
+    {
+      "titel": "Martin Eden",
+      "autor": "Jack London",
+      "genre": "Roman",
+      "isbn": 9783423146548,
+      "regal": "L",
+      "ausgeliehen": false
+    }
+  ],
+  "RegalListe": [
+    {
+      "Bezeichnung": "O",
+      "Buecher": [
+        {
+          "titel": "1984",
+          "autor": "George Orwell",
+          "genre": "Dystopie",
+          "isbn": 3548234100,
+          "regal": "O",
+          "ausgeliehen": false
+        },
+        {
+          "titel": "Farm der Tiere",
+          "autor": "George Orwell",
+          "genre": "Fable",
+          "isbn": 9783730609774,
+          "regal": "O",
+          "ausgeliehen": false
+        },
+        {
+          "titel": "1984",
+          "autor": "George Orwell",
+          "genre": "Dystopie",
+          "isbn": 3548234100,
+          "regal": "O",
+          "ausgeliehen": false
+        }
+      ]
+    },
+    {
+      "Bezeichnung": "L",
+      "Buecher": [
+        {
+          "titel": "Martin Eden",
+          "autor": "Jack London",
+          "genre": "Roman",
+          "isbn": 9783423146548,
+          "regal": "L",
+          "ausgeliehen": false
+        }
+      ]
+    }
+  ],
+  "VerleihListe": [
+    {
+      "buch": {
+        "titel": "1984",
+        "autor": "George Orwell",
+        "genre": "Dystopie",
+        "isbn": 3548234100,
+        "regal": "O",
+        "ausgeliehen": true
+      },
+      "kunde": {
+        "Vorname": "Rasul",
+        "Nachname": "Torshkhoev",
+        "Adresse": "",
+        "Telefon": "",
+        "KundeNummer": "K_001"
+      },
+      "ausleihDatum": "24-10-2024",
+      "rueckgabeDatum": "07-11-2024"
+    }
+  ]
+}
