@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nujabesTracks>
+    <track id="1" genre="Jazz Hip-Hop">
+        <title>Feather</title>
+        <album>Modal Soul</album>
+        <duration>4:50</duration>
+        <releaseYear>2005</releaseYear>
+    </track>
+    <track id="2" genre="Hip-Hop">
+        <title>Battlecry</title>
+        <album>Samurai Champloo Music Record: Departure</album>
+        <duration>3:20</duration>
+        <releaseYear>2004</releaseYear>
+    </track>
+    <track id="3" genre="Jazz Hip-Hop">
+        <title>Lady Brown</title>
+        <album>Metaphorical Music</album>
+        <duration>4:45</duration>
+        <releaseYear>2003</releaseYear>
+    </track>
+    <track id="4" genre="Instrumental">
+        <title>Aurora</title>
+        <album>Spiritual State</album>
+        <duration>4:21</duration>
+        <releaseYear>2011</releaseYear>
+    </track>
+    <track id="5" genre="Jazz Hip-Hop">
+        <title>Luv(sic) Part 3</title>
+        <album>Modal Soul</album>
+        <duration>5:39</duration>
+        <releaseYear>2005</releaseYear>
+    </track>
+    <track id="6" genre="Instrumental">
+        <title>Reflection Eternal</title>
+        <album>Metaphorical Music</album>
+        <duration>6:16</duration>
+        <releaseYear>2003</releaseYear>
+    </track>
+    <track id="7" genre="Jazz Hip-Hop">
+        <title>Arurian Dance</title>
+        <album>Samurai Champloo Music Record: Departure</album>
+        <duration>4:10</duration>
+        <releaseYear>2004</releaseYear>
+    </track>
+    <track id="8" genre="Jazz Hip-Hop">
+        <title>World's End Rhapsody</title>
+        <album>Modal Soul</album>
+        <duration>5:42</duration>
+        <releaseYear>2005</releaseYear>
+    </track>
+</nujabesTracks>
