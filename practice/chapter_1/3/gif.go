@@ -1,0 +1,115 @@
+package main
+
+import (
+	"image"
+	"image/color"
+	"image/gif"
+	"io"
+	"log"
+	"math"
+	"math/rand"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+)
+
+//!-main
+// Packages not needed by version in book.
+
+//!+main
+
+var (
+	cycler int
+	sizer int
+)
+var palette = []color.Color{color.White, color.RGBA{0x32, 0xa8, 0x52, 0xff},  color.RGBA{0x32, 0x64, 0xa8, 0xff},  color.RGBA{0xde, 0xd3, 0x37, 0xff}, color.RGBA{0x8a, 0x19, 0x9e, 0xff}, color.RGBA{0x87, 0x3e, 0x23, 0xff}, color.RGBA{0x37, 0x99, 0x28, 0xff}} //#32a852
+
+const (
+	whiteIndex = 0 // first color in palette
+)
+
+func main() {
+	//!-main
+	// The sequence of images is deterministic unless we seed
+	// the pseudo-random number generator using the current time.
+	// Thanks to Randall McPherson for pointing out the omission.
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	if len(os.Args) > 1 && os.Args[1] == "web" {
+		//!+http
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			if err := r.ParseForm(); err != nil {
+				log.Print(err)
+			}
+			for k, values := range r.Form {
+				for _, v := range values{
+					if k == "cycles"{
+						var err error
+						cycler, err = strconv.Atoi(v)
+						if err != nil {
+							log.Print(err)
+							cycler = 0
+						}
+					} else if k == "size"{
+						var err error
+						sizer, err = strconv.Atoi(v)
+						if err != nil {
+							log.Print(err)
+							sizer = 0
+						}
+					}
+				}
+			}
+			lissajous(w)
+		}
+		http.HandleFunc("/", handler)
+		//!-http
+		log.Fatal(http.ListenAndServe("localhost:8000", nil))
+		return
+	}
+	//!+main
+	lissajous(os.Stdout)
+}
+
+func lissajous(out io.Writer) {
+	const (
+		cycles  = 5     // number of complete x oscillator revolutions
+		res     = 0.001 // angular resolution
+		size    = 100   // image canvas covers [-size..+size]
+		nframes = 64    // number of animation frames
+		delay   = 8     // delay between frames in 10ms units
+	)
+
+	var cycl float64;
+	if cycler > 0 {
+		cycl = float64(cycler)
+	} else {
+		cycl = cycles
+	}
+
+	var siz int;
+	if sizer > 0 {
+		siz = sizer
+	} else {
+		siz = size
+	}
+
+	freq := rand.Float64() * 3.0 // relative frequency of y oscillator
+	anim := gif.GIF{LoopCount: nframes}
+	phase := 0.0 // phase difference
+	for i := 0; i < nframes; i++ {
+		rect := image.Rect(0, 0, 2*siz+1, 2*siz+1)
+		img := image.NewPaletted(rect, palette)
+		for t := 0.0; t < cycl*2*math.Pi; t += res {
+			x := math.Sin(t)
+			y := math.Sin(t*freq + phase)
+			img.SetColorIndex(siz+int(x*float64(siz)+0.5), siz+int(y*float64(siz)+0.5),
+			uint8(rand.Intn(len(palette))))
+		}
+		phase += 0.1
+		anim.Delay = append(anim.Delay, delay)
+		anim.Image = append(anim.Image, img)
+	}
+	gif.EncodeAll(out, &anim) // NOTE: ignoring encoding errors
+}
