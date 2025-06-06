@@ -80,6 +80,12 @@ func encode(buf *bytes.Buffer, v reflect.Value, depth int) error {
 		buf.WriteByte('(')
 		first := true
 		for i := 0; i < v.NumField(); i++ {
+			fieldInfo := v.Type().Field(i) // a reflect.StructField
+			tag := fieldInfo.Tag           // a reflect.StructTag
+			name := tag.Get("sexpr")
+			if name == "" {
+				name = v.Type().Field(i).Name
+			}
 			if checkNil(v.Field(i)) {
 				continue
 			}
@@ -87,7 +93,7 @@ func encode(buf *bytes.Buffer, v reflect.Value, depth int) error {
 				buf.WriteByte(' ')
 			}
 			first = false
-			fmt.Fprintf(buf, "(%s ", v.Type().Field(i).Name)
+			fmt.Fprintf(buf, "(%s ", name)
 			if err := encode(buf, v.Field(i), depth); err != nil {
 				return err
 			}
@@ -134,9 +140,7 @@ func encode(buf *bytes.Buffer, v reflect.Value, depth int) error {
 		buf.WriteByte(')')
 
 	case reflect.Bool:
-		if v.Bool() {
-			buf.WriteByte('t')
-		}
+		fmt.Fprintf(buf, "%t", v.Bool())
 
 	case reflect.Float32, reflect.Float64:
 		fmt.Fprintf(buf, "%g", v.Float())

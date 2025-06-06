@@ -119,6 +119,11 @@ func read(lex *lexer, v reflect.Value) {
 		v.SetInt(int64(i))
 		lex.next()
 		return
+	case scanner.Float:
+		f, _ := strconv.ParseFloat(lex.text(), 10)
+		v.SetFloat(f)
+		lex.next()
+		return
 	case '(':
 		lex.next()
 		readList(lex, v)
@@ -148,6 +153,18 @@ func readList(lex *lexer, v reflect.Value) {
 		}
 
 	case reflect.Struct: // ((name value) ...)
+		typeInfo := v.Type()
+		fieldMap := make(map[string]int)
+		for i := 0; i < typeInfo.NumField(); i++ {
+			field := typeInfo.Field(i)
+			tag := field.Tag.Get("sexpr")
+			if tag != "" {
+				fieldMap[tag] = i
+			} else {
+				fieldMap[field.Name] = i
+			}
+		}
+
 		for !endList(lex) {
 			lex.consume('(')
 			if lex.token != scanner.Ident {
@@ -155,7 +172,14 @@ func readList(lex *lexer, v reflect.Value) {
 			}
 			name := lex.text()
 			lex.next()
-			read(lex, v.FieldByName(name))
+
+			if fieldIndex, ok := fieldMap[name]; ok {
+				read(lex, v.Field(fieldIndex))
+			} else {
+				var dummy interface{}
+				read(lex, reflect.ValueOf(&dummy).Elem())
+			}
+
 			lex.consume(')')
 		}
 
