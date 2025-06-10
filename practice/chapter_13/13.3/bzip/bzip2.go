@@ -1,0 +1,3 @@
+package bzip
+
+import "C"
