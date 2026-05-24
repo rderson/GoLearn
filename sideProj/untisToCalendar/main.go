@@ -11,7 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
+
+	"untisToCalendar/untis"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -22,6 +25,45 @@ import (
 func main() {
 	// Create a context for API calls
 	ctx := context.Background()
+
+	// Authenticate with WebUntis and fetch timetable
+	httpClient := &http.Client{}
+
+	untisClient := untis.NewClient(
+		"TorRas",         // TODO: Move to .env
+		"Behördestinkt1", // TODO: Move to .env
+		"https://gotthard-kuehl-schule.webuntis.com/WebUntis/jsonrpc.do",
+		949, // TODO: Move to .env
+	)
+
+	// Authenticate with WebUntis
+	sessionID, err := untisClient.Authenticate(httpClient)
+	if err != nil {
+		log.Fatalf("Error authenticating with WebUntis: %v", err)
+	}
+	fmt.Println("Authenticated with WebUntis, Session ID:", sessionID)
+
+	// Fetch timetable for the next 14 days
+	startDate := time.Now()
+	endDate := startDate.AddDate(0, 0, 14)
+
+	lessons, err := untisClient.GetTimetable(httpClient, sessionID, startDate, endDate)
+	if err != nil {
+		log.Fatalf("Error fetching timetable: %v", err)
+	}
+	fmt.Printf(" Fetched %d lessons from WebUntis\n", len(lessons))
+
+	// Fetch subject and teacher mappings
+	subjects, err := untisClient.GetSubjects(httpClient, sessionID)
+	if err != nil {
+		log.Fatalf("Error fetching subjects: %v", err)
+	}
+	teachersMap, err := untisClient.GetTeachers(httpClient, sessionID)
+	if err != nil {
+		log.Fatalf("Error fetching teachers: %v", err)
+	}
+
+	// Set up Google Calendar
 
 	// Read Google API credentials from file
 	b, err := os.ReadFile("credentials.json")
@@ -35,34 +77,153 @@ func main() {
 		log.Fatalf("Error parsing credentials.json: %v", err)
 	}
 
-	// Get an authenticated HTTP client
-	client := getClient(ctx, config)
+	// Get an authenticated HTTP client for Google
+	googleClient := getClient(ctx, config)
 
 	// Create a new Calendar service using the authenticated client
-	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
+	srv, err := calendar.NewService(ctx, option.WithHTTPClient(googleClient))
 	if err != nil {
 		log.Fatalf("Error creating Calendar service: %v", err)
 	}
 
-	// Define a test event to create
-	event := &calendar.Event{
-		Summary:     "WebUntis test event automatic",
-		Description: "Third event created from Go but this time automatic",
-		Start: &calendar.EventDateTime{
-			DateTime: time.Now().Add(1 * time.Hour).Format(time.RFC3339),
-		},
-		End: &calendar.EventDateTime{
-			DateTime: time.Now().Add(2 * time.Hour).Format(time.RFC3339),
-		},
-	}
-
-	// Insert the event into the primary calendar
-	created, err := srv.Events.Insert("primary", event).Do()
+	// Find or create the WebUntis calendar
+	calendarID, err := getOrCreateCalendar(srv)
 	if err != nil {
-		log.Fatalf("Error creating event: %v", err)
+		log.Fatalf("Error getting calendar: %v", err)
+	}
+	fmt.Printf("Using calendar ID: %s\n", calendarID)
+
+	// Remove existing events in this calendar for the same date range (recreate)
+	fmt.Println("Removing existing events in WebUntis calendar for the date range...")
+	timeMin := startDate.Format(time.RFC3339)
+	timeMax := endDate.Format(time.RFC3339)
+	evList, err := srv.Events.List(calendarID).
+		ShowDeleted(false).
+		SingleEvents(true).
+		TimeMin(timeMin).
+		TimeMax(timeMax).
+		Do()
+	if err != nil {
+		log.Printf("Warning: could not list existing events: %v", err)
+	} else {
+		for _, ev := range evList.Items {
+			if err := srv.Events.Delete(calendarID, ev.Id).Do(); err != nil {
+				log.Printf("Warning: could not delete event %s: %v", ev.Id, err)
+			}
+		}
 	}
 
-	fmt.Println("Event created:", created.HtmlLink)
+	// Convert lessons to calendar events
+
+	createdCount := 0
+	for _, lesson := range lessons {
+		// Skip cancelled lessons
+		if lesson.Code == "cancelled" {
+			continue
+		}
+
+		// Convert lesson dates and times to datetime
+		eventStart, eventEnd := lessonToDateTime(lesson)
+
+		// Resolve subject name (prefer LongName then Name) and teacher abbreviations
+		subjectName := "Untis Lesson"
+		if len(lesson.Subjects) > 0 {
+			if s, ok := subjects[lesson.Subjects[0].ID]; ok {
+				if s.LongName != "" {
+					subjectName = s.LongName
+				} else if s.Name != "" {
+					subjectName = s.Name
+				}
+			}
+		}
+
+		var teacherAbbrs []string
+		for _, t := range lesson.Teachers {
+			if te, ok := teachersMap[t.ID]; ok {
+				if te.Abbreviation != "" {
+					teacherAbbrs = append(teacherAbbrs, te.Abbreviation)
+				} else if te.Name != "" {
+					teacherAbbrs = append(teacherAbbrs, te.Name)
+				}
+			}
+		}
+
+		// Create calendar event with subject as title and teacher list in description
+		event := &calendar.Event{
+			Summary:     subjectName,
+			Description: fmt.Sprintf("Teachers: %s\nWebUntis ID: %d", strings.Join(teacherAbbrs, ", "), lesson.ID),
+			Start: &calendar.EventDateTime{
+				DateTime: eventStart.Format(time.RFC3339),
+			},
+			End: &calendar.EventDateTime{
+				DateTime: eventEnd.Format(time.RFC3339),
+			},
+		}
+
+		// Insert the event into the WebUntis calendar
+		created, err := srv.Events.Insert(calendarID, event).Do()
+		if err != nil {
+			log.Printf("Warning: Error creating event: %v\n", err)
+			continue
+		}
+		createdCount++
+		fmt.Printf("Created event: %s\n", created.HtmlLink)
+	}
+
+	fmt.Printf("\nSuccessfully created %d calendar events\n", createdCount)
+}
+
+// getOrCreateCalendar finds or creates a calendar named "Untis" and returns its ID
+func getOrCreateCalendar(srv *calendar.Service) (string, error) {
+	// List all calendars to find if WebUntis already exists
+	calendarList, err := srv.CalendarList.List().Do()
+	if err != nil {
+		return "", fmt.Errorf("error listing calendars: %v", err)
+	}
+
+	// Search for existing "Untis" calendar
+	for _, cal := range calendarList.Items {
+		if cal.Summary == "Untis" {
+			fmt.Println("Found existing Untis calendar")
+			return cal.Id, nil
+		}
+	}
+
+	// Create new calendar if it doesn't exist
+	fmt.Println("Creating new Untis calendar...")
+	newCal := &calendar.Calendar{
+		Summary:     "Untis",
+		Description: "Automatic synced timetable from WebUntis",
+	}
+
+	created, err := srv.Calendars.Insert(newCal).Do()
+	if err != nil {
+		return "", fmt.Errorf("error creating calendar: %v", err)
+	}
+
+	fmt.Println("Created new WebUntis calendar")
+	return created.Id, nil
+}
+
+// lessonToDateTime converts a WebUntis lesson to start and end datetime.Time objects
+func lessonToDateTime(lesson untis.Lesson) (startTime, endTime time.Time) {
+	// Parse date from YYYYMMDD format
+	year := lesson.Date / 10000
+	month := (lesson.Date % 10000) / 100
+	day := lesson.Date % 100
+
+	// Parse time from HHMM format
+	startHour := lesson.StartTime / 100
+	startMin := lesson.StartTime % 100
+	endHour := lesson.EndTime / 100
+	endMin := lesson.EndTime % 100
+
+	// Create time objects with Berlin timezone
+	loc, _ := time.LoadLocation("Europe/Berlin")
+	startTime = time.Date(year, time.Month(month), day, startHour, startMin, 0, 0, loc)
+	endTime = time.Date(year, time.Month(month), day, endHour, endMin, 0, 0, loc)
+
+	return startTime, endTime
 }
 
 // getClient retrieves an authenticated HTTP client for Google APIs.
@@ -89,14 +250,14 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	// set the redirect URI to our local server where Google will send the authorization code
 	config.RedirectURL = "http://localhost:8080/"
 
-	// creating a handle function for our local server to copy the authorization code from the url and send it to the channel that was created earlier 
+	// creating a handle function for our local server to copy the authorization code from the url and send it to the channel that was created earlier
 	// so the user doesn't need  to paste the authorization code manually
-	http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request)  {
-		// readind the "code..." part of the URL
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// reading the "code..." part of the URL
 		code := r.URL.Query().Get("code")
 		if code == "" {
 			http.Error(w, "Authorization code not found.", 400)
-			return 
+			return
 		}
 
 		// sending the authorization code to the channel
